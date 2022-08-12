@@ -2,17 +2,20 @@ package legacyrpc
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcwallet/wallet"
 	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
-func gotoRemote(interface{}, *wallet.Wallet) (interface{}, error){
-	return nil,nil
+func gotoRemote(interface{}, *wallet.Wallet) (interface{}, error) {
+	return nil, nil
 }
+
 var pubRpcHandlers = map[string]struct {
 	handler          requestHandler
 	handlerWithChain requestHandlerChainRequired
@@ -28,15 +31,15 @@ var pubRpcHandlers = map[string]struct {
 	noHelp bool
 }{
 	// Reference implementation wallet methods (implemented)
-	"addmultisigaddress":     {handler: unsupported},
-	"createmultisig":         {handler: unsupported},
-	"dumpprivkey":            {handler: unsupported},
-	"getaccount":             {handler: unsupported},
-	"getaccountaddress":      {handler: unsupported},
-	"getaddressesbyaccount":  {handler: unsupported},
-	"getbalance":             {handler: unsupported},
-	"getbestblockhash":       {handler: gotoRemote},
-	"getblockcount":          {handler: gotoRemote},
+	"addmultisigaddress":    {handler: unsupported},
+	"createmultisig":        {handler: unsupported},
+	"dumpprivkey":           {handler: unsupported},
+	"getaccount":            {handler: unsupported},
+	"getaccountaddress":     {handler: unsupported},
+	"getaddressesbyaccount": {handler: unsupported},
+	"getbalance":            {handler: unsupported},
+	"getbestblockhash":      {handler: gotoRemote},
+	"getblockcount":         {handler: gotoRemote},
 	//"getinfo":                {handlerWithChain: getInfo},
 	"getinfo":                {handler: gotoRemote},
 	"getnewaddress":          {handler: unsupported},
@@ -67,7 +70,6 @@ var pubRpcHandlers = map[string]struct {
 	"walletpassphrase":       {handler: unsupported},
 	"walletpassphrasechange": {handler: unsupported},
 
-
 	// Reference implementation methods (still unimplemented)
 	"backupwallet":         {handler: unimplemented, noHelp: true},
 	"dumpwallet":           {handler: unimplemented, noHelp: true},
@@ -79,9 +81,6 @@ var pubRpcHandlers = map[string]struct {
 	"encryptwallet": {handler: unsupported, noHelp: true},
 	"move":          {handler: unsupported, noHelp: true},
 	"setaccount":    {handler: unsupported, noHelp: true},
-
-
-
 
 	// Extensions to the reference client JSON-RPC API
 	"createnewaccount": {handler: unsupported},
@@ -97,15 +96,23 @@ var pubRpcHandlers = map[string]struct {
 	"walletislocked":          {handler: unsupported},
 }
 
-
 /*bod update wxf
  */
 //modify from  func lazyApplyHandler
 //only export chain public api, not include any wallet function
-func lazyApplyHandlerOnlyPub(request *btcjson.Request, chainClient *rpcclient.Client ) lazyHandler {
+func lazyApplyHandlerOnlyPub(request *btcjson.Request, chainClient *rpcclient.Client) lazyHandler {
 	handlerData, ok := pubRpcHandlers[request.Method]
 	//var  w *wallet.Wallet
-	if ok && handlerData.handler != nil && fmt.Sprintf("%v",handlerData.handler)!=fmt.Sprintf("%v",gotoRemote) {
+
+	//block omni_sendXXXX
+	//https://github.com/OmniLayer/omnicore/blob/master/src/omnicore/doc/rpc-api.md
+	if strings.HasPrefix(request.Method, "omni_send") || strings.HasPrefix(request.Method, "omni_funded") || strings.HasPrefix(request.Method, "omni_set") {
+		return func() (interface{}, *btcjson.RPCError) {
+			return nil, jsonError(errors.New("public api have disabled " + request.Method))
+		}
+	}
+
+	if ok && handlerData.handler != nil && fmt.Sprintf("%v", handlerData.handler) != fmt.Sprintf("%v", gotoRemote) {
 		return func() (interface{}, *btcjson.RPCError) {
 			cmd, err := btcjson.UnmarshalCmd(request)
 			if err != nil {
@@ -136,7 +143,7 @@ func lazyApplyHandlerOnlyPub(request *btcjson.Request, chainClient *rpcclient.Cl
 	}
 }
 
-func PublicHttpHandler(w http.ResponseWriter, r *http.Request,chainClient *rpcclient.Client) {
+func PublicHttpHandler(w http.ResponseWriter, r *http.Request, chainClient *rpcclient.Client) {
 	body := http.MaxBytesReader(w, r.Body, maxRequestSize)
 	rpcRequest, err := ioutil.ReadAll(body)
 	if err != nil {
@@ -174,7 +181,7 @@ func PublicHttpHandler(w http.ResponseWriter, r *http.Request,chainClient *rpccl
 	// are handled for the authenticate and stop request methods.
 	var res interface{}
 	var jsonErr *btcjson.RPCError
-	res, jsonErr =lazyApplyHandlerOnlyPub(&req,chainClient)()
+	res, jsonErr = lazyApplyHandlerOnlyPub(&req, chainClient)()
 	// Marshal and send.
 	mresp, err := btcjson.MarshalResponse(
 		btcjson.RpcVersion1, req.ID, res, jsonErr,

@@ -96,10 +96,11 @@ var pubRpcHandlers = map[string]struct {
 	"walletislocked":          {handler: unsupported},
 }
 
-/*bod update wxf
- */
-//modify from  func lazyApplyHandler
-//only export chain public api, not include any wallet function
+/* 
+ * obd update by wxf: 
+ * modify from  func lazyApplyHandler, 
+ * only export chain public api, not include any wallet function
+ */ 
 func lazyApplyHandlerOnlyPub(request *btcjson.Request, chainClient *rpcclient.Client) lazyHandler {
 	handlerData, ok := pubRpcHandlers[request.Method]
 	//var  w *wallet.Wallet
@@ -108,7 +109,7 @@ func lazyApplyHandlerOnlyPub(request *btcjson.Request, chainClient *rpcclient.Cl
 	//https://github.com/OmniLayer/omnicore/blob/master/src/omnicore/doc/rpc-api.md
 	if strings.HasPrefix(request.Method, "omni_send") || strings.HasPrefix(request.Method, "omni_funded") || strings.HasPrefix(request.Method, "omni_set") {
 		return func() (interface{}, *btcjson.RPCError) {
-			return nil, jsonError(errors.New("public api have disabled " + request.Method))
+			return nil, jsonError(errors.New("public api have been disabled " + request.Method))
 		}
 	}
 
